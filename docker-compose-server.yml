@@ -1,0 +1,94 @@
+# 云服务器版 Docker Compose 配置
+# 适用于云服务器生产环境部署
+# 
+# 使用方法：
+# 1. 复制此文件到服务器项目根目录
+# 2. 创建 .env 文件配置环境变量
+# 3. 执行：docker-compose -f docker-compose-server.yml up -d
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: chart_mysql_server
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-test_user}
+      MYSQL_USER: ${MYSQL_USER:-test_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"  # 云服务器上使用标准3306端口
+    volumes:
+      - mysql_data_server:/var/lib/mysql
+      - ./backend/src/main/resources/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: 
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      - --max_connections=200
+      - --max_allowed_packet=64M
+    networks:
+      - chart_network_server
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.server  # 使用云服务器版Dockerfile
+    container_name: chart_backend_server
+    restart: always
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-test_user}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-root}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - chart_network_server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/dashboard/getUserFrequency"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  nginx:
+    image: nginx:alpine
+    container_name: chart_nginx_server
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"  # 预留HTTPS端口
+    volumes:
+      - ./nginx/nginx-server.conf:/etc/nginx/conf.d/default.conf
+      - ./frontend:/usr/share/nginx/html  # 云服务器上前端文件路径
+    depends_on:
+      - backend
+    networks:
+      - chart_network_server
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mysql_data_server:
+    driver: local
+
+networks:
+  chart_network_server:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+

@@ -1,0 +1,62 @@
+# 云服务器版 Dockerfile
+# 适用于云服务器生产环境部署
+# 
+# 使用方法：
+# 1. 在项目根目录执行：docker build -f backend/Dockerfile.server -t backend:latest .
+# 2. 运行容器：docker run -d -p 8080:8080 --name backend \
+#    -e SPRING_PROFILES_ACTIVE=prod \
+#    -e SPRING_DATASOURCE_URL=jdbc:mysql://host.docker.internal:3306/test_user?useUnicode=true&characterEncoding=utf-8&serverTimezone=UTC \
+#    -e SPRING_DATASOURCE_USERNAME=root \
+#    -e SPRING_DATASOURCE_PASSWORD=your_password \
+#    backend:latest
+
+# 多阶段构建：减少镜像大小
+FROM maven:3.8.6-openjdk-8 AS build
+WORKDIR /app
+
+# 复制pom.xml（利用Docker缓存层）
+COPY backend/pom.xml .
+# 下载依赖（如果pom.xml没变，这层会被缓存）
+RUN mvn dependency:go-offline -B
+
+# 复制源码
+COPY backend/src ./src
+
+# 构建应用（跳过测试以加快构建）
+RUN mvn clean package -DskipTests -B
+
+# 重命名 JAR 文件为 app.jar（便于后续复制）
+RUN mv /app/target/backend-*.jar /app/app.jar
+
+# 运行阶段：使用更小的基础镜像
+# 注意：openjdk 镜像已不再维护，改用 Eclipse Temurin（原 AdoptOpenJDK）
+# Eclipse Temurin 是 OpenJDK 的官方替代品，更可靠且持续维护
+FROM eclipse-temurin:8-jre
+
+WORKDIR /app
+
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl tzdata && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# 👇 直接复制已重命名的 JAR
+COPY --from=build /app/app.jar .
+
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8080
+
+ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/heapdump.hprof -Djava.security.egd=file:/dev/./urandom -Duser.timezone=Asia/Shanghai"
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/api/dashboard/getUserFrequency || exit 1
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+
