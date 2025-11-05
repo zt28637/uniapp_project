@@ -39,6 +39,7 @@ docker compose version
 ```
 
 ### 2.XFTP上传文件
+```txt
 ├── backend/                           # 后端项目目录
 │   ├── src/                           # 源代码
 │   │   └── main/
@@ -66,6 +67,7 @@ docker compose version
 ├── nginx/
 │   └── nginx.server.conf                     # Nginx配置文件
 └── docker-compose-server.yml          # Docker Compose配置
+```
 - nginx配置文件绑定后端端口8080
 -执行命令 wget https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js -O echarts.min.js
 -以防万一配置openjdk8：sudo apt install openjdk-8-jdk（也可以不用，只使用Nginx采用）
@@ -115,5 +117,6 @@ docker compose -f docker-compose-server.yml ps
 #### 4.浏览器访问
 - http://34.84.232.200
 - http://34.84.232.200/api/dashboard/getUserFrequency
+
 
 
