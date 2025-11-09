@@ -4,7 +4,7 @@
 - HBuilderX发行H5完成
 - 根据本机部署编写相关线上部署文件Dockerfile.server,docker-compose-sever.yml,nginx.server.comf
 
-### 
+### 1.安装Docker和Docker Compose
 
 #### 脚本安装
 - chmod +x install-docker.sh
@@ -118,6 +118,7 @@ docker compose -f docker-compose-server.yml ps
 #### 4.浏览器访问
 - http://34.84.232.200
 - http://34.84.232.200/api/dashboard/getUserFrequency
+
 
 
 
